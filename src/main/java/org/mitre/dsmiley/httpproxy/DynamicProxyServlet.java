@@ -16,13 +16,7 @@ package org.mitre.dsmiley.httpproxy;
  * limitations under the License.
  */
 
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpEntityEnclosingRequest;
-import org.apache.http.HttpHeaders;
-import org.apache.http.HttpHost;
-import org.apache.http.HttpRequest;
-import org.apache.http.HttpResponse;
+import org.apache.http.*;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.AbortableHttpRequest;
 import org.apache.http.client.params.ClientPNames;
@@ -38,8 +32,11 @@ import org.apache.http.message.HeaderGroup;
 import org.apache.http.params.BasicHttpParams;
 import org.apache.http.params.HttpParams;
 import org.apache.http.util.EntityUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.servlet.ServletException;
+import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -50,6 +47,7 @@ import java.io.OutputStream;
 import java.lang.reflect.Constructor;
 import java.net.HttpCookie;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.BitSet;
 import java.util.Enumeration;
 import java.util.Formatter;
@@ -69,8 +67,11 @@ import java.util.List;
  * </p>
  *
  * @author David Smiley dsmiley@mitre.org
+ * @author Lukasz Sieradzki
  */
-public class ProxyServlet extends HttpServlet {
+@WebServlet(urlPatterns = "/dynamic-proxy/*")
+public class DynamicProxyServlet extends HttpServlet {
+  private static final Logger LOG = LoggerFactory.getLogger(DynamicProxyServlet.class);
 
   /* INIT PARAMETER NAME CONSTANTS */
 
@@ -83,23 +84,16 @@ public class ProxyServlet extends HttpServlet {
   /** The parameter name for the target (destination) URI to proxy to. */
   protected static final String P_TARGET_URI = "targetUri";
   protected static final String ATTR_TARGET_URI =
-          ProxyServlet.class.getSimpleName() + ".targetUri";
+          DynamicProxyServlet.class.getSimpleName() + ".targetUri";
   protected static final String ATTR_TARGET_HOST =
-          ProxyServlet.class.getSimpleName() + ".targetHost";
+          DynamicProxyServlet.class.getSimpleName() + ".targetHost";
 
   /* MISC */
 
-  protected boolean doLog = false;
+  protected boolean doLog = true;
   protected boolean doForwardIP = true;
   /** User agents shouldn't send the url fragment but what if it does? */
   protected boolean doSendUrlFragment = true;
-
-  //These next 3 are cached here, and should only be referred to in initialization logic. See the
-  // ATTR_* parameters.
-  /** From the configured parameter "targetUri". */
-  protected String targetUri;
-  protected URI targetUriObj;//new URI(targetUri)
-  protected HttpHost targetHost;//URIUtils.extractHost(targetUriObj);
 
   private HttpClient proxyClient;
 
@@ -110,11 +104,19 @@ public class ProxyServlet extends HttpServlet {
 
 
   protected String getTargetUri(HttpServletRequest servletRequest) {
-    return (String) servletRequest.getAttribute(ATTR_TARGET_URI);
+    return extractTargetUrl(servletRequest);
   }
 
   private HttpHost getTargetHost(HttpServletRequest servletRequest) {
-    return (HttpHost) servletRequest.getAttribute(ATTR_TARGET_HOST);
+    try {
+      return URIUtils.extractHost(new URI(extractTargetUrl(servletRequest)));
+    } catch (URISyntaxException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private String extractTargetUrl(HttpServletRequest servletRequest) {
+    return  servletRequest.getRequestURI().replaceAll(servletRequest.getServletPath(), "").replaceFirst("/", "");
   }
 
   /**
@@ -137,25 +139,10 @@ public class ProxyServlet extends HttpServlet {
         this.doForwardIP = Boolean.parseBoolean(doForwardIPString);
     }
 
-    initTarget();//sets target*
-
     HttpParams hcParams = new BasicHttpParams();
     hcParams.setParameter(ClientPNames.COOKIE_POLICY, CookiePolicy.IGNORE_COOKIES);
     readConfigParam(hcParams, ClientPNames.HANDLE_REDIRECTS, Boolean.class);
     proxyClient = createHttpClient(hcParams);
-  }
-
-  protected void initTarget() throws ServletException {
-    targetUri = getConfigParam(P_TARGET_URI);
-    if (targetUri == null)
-      throw new ServletException(P_TARGET_URI+" is required.");
-    //test it's valid
-    try {
-      targetUriObj = new URI(targetUri);
-    } catch (Exception e) {
-      throw new ServletException("Trying to process targetUri init parameter: "+e,e);
-    }
-    targetHost = URIUtils.extractHost(targetUriObj);
   }
 
   /** Called from {@link #init(javax.servlet.ServletConfig)}. HttpClient offers many opportunities
@@ -230,13 +217,6 @@ public class ProxyServlet extends HttpServlet {
   @Override
   protected void service(HttpServletRequest servletRequest, HttpServletResponse servletResponse)
       throws ServletException, IOException {
-    //initialize request attributes from caches if unset by a subclass by this point
-    if (servletRequest.getAttribute(ATTR_TARGET_URI) == null) {
-      servletRequest.setAttribute(ATTR_TARGET_URI, targetUri);
-    }
-    if (servletRequest.getAttribute(ATTR_TARGET_HOST) == null) {
-      servletRequest.setAttribute(ATTR_TARGET_HOST, targetHost);
-    }
 
     // Make the Request
     //note: we won't transfer the protocol version because I'm not sure it would truly be compatible
@@ -262,7 +242,7 @@ public class ProxyServlet extends HttpServlet {
     try {
       // Execute the request
       if (doLog) {
-        log("proxy " + method + " uri: " + servletRequest.getRequestURI() + " -- " + proxyRequest.getRequestLine().getUri());
+        LOG.info("proxy " + method + " uri: " + servletRequest.getRequestURI() + " -- " + proxyRequest.getRequestLine().getUri());
       }
       proxyResponse = proxyClient.execute(getTargetHost(servletRequest), proxyRequest);
 
@@ -505,10 +485,7 @@ public class ProxyServlet extends HttpServlet {
   protected String rewriteUrlFromRequest(HttpServletRequest servletRequest) {
     StringBuilder uri = new StringBuilder(500);
     uri.append(getTargetUri(servletRequest));
-    // Handle the path given to the servlet
-    if (servletRequest.getPathInfo() != null) {//ex: /my/path.html
-      uri.append(encodeUriQuery(servletRequest.getPathInfo()));
-    }
+
     // Handle the query string & fragment
     String queryString = servletRequest.getQueryString();//ex:(following '?'): name=value&foo=bar#fragment
     String fragment = null;
@@ -554,9 +531,6 @@ public class ProxyServlet extends HttpServlet {
     }
     return theUrl;
   }
-
-  /** The target URI as configured. Not null. */
-  public String getTargetUri() { return targetUri; }
 
   /**
    * Encodes characters in the query or fragment part of the URI.

@@ -1,24 +1,12 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <parent>
-    <groupId>org.sonatype.oss</groupId>
-    <artifactId>oss-parent</artifactId>
-    <version>7</version>
-  </parent>
+  <groupId>com.blogspot.leakfromjavaheap</groupId>
+  <artifactId>dynamic-proxy</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <packaging>war</packaging>
 
-  <groupId>org.mitre.dsmiley.httpproxy</groupId>
-  <artifactId>smiley-http-proxy-servlet</artifactId>
-  <version>1.7-SNAPSHOT</version>
-  <packaging>jar</packaging>
-
-  <name>Smiley's HTTP Proxy Servlet</name>
-  <description>An HTTP Proxy (aka gateway) in the form of a Java servlet. An
-    HTTP proxy is useful for AJAX applications to communicate with web
-    accessible services on hosts other than where the web application is hosted.
-  </description>
-
-  <url>https://github.com/dsmiley/HTTP-Proxy-Servlet</url>
+  <name>Dynamic Proxy Servlet</name>
 
   <licenses>
     <license>
@@ -28,26 +16,15 @@
     </license>
   </licenses>
 
-  <developers>
-    <developer>
-      <name>David Smiley</name>
-      <email>dsmiley@apache.org</email>
-      <!-- I used to work for MITRE for many years but I don't anymore. -->
-      <!--<organization>MITRE</organization>-->
-    </developer>
-  </developers>
-
-  <scm>
-    <url>https://github.com/dsmiley/HTTP-Proxy-Servlet</url>
-    <connection>scm:git:https://dsmiley@github.com/dsmiley/HTTP-Proxy-Servlet.git</connection>
-    <developerConnection>scm:git:git@github.com:dsmiley/HTTP-Proxy-Servlet.git</developerConnection>
-  </scm>
-
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
     <!-- works with v4.1 and forward -->
     <httpclient.version>4.3.4</httpclient.version>
+
+    <slf4j.version>1.6.6</slf4j.version>
+    <slf4j.log4j12.version>1.6.6</slf4j.log4j12.version>
+    <log4j.version>1.2.17</log4j.version>
   </properties>
 
   <dependencies>
@@ -55,8 +32,8 @@
     <!-- FYI tomcat 5.5 & beyond -->
     <dependency>
       <groupId>javax.servlet</groupId>
-      <artifactId>servlet-api</artifactId>
-      <version>2.4</version>
+      <artifactId>javax.servlet-api</artifactId>
+      <version>3.0.1</version>
       <scope>provided</scope>
     </dependency>
 
@@ -64,6 +41,22 @@
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpclient</artifactId>
       <version>${httpclient.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-log4j12</artifactId>
+      <version>${slf4j.log4j12.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>log4j</groupId>
+      <artifactId>log4j</artifactId>
+      <version>${log4j.version}</version>
     </dependency>
 
     <dependency>
@@ -85,13 +78,6 @@
       <groupId>httpunit</groupId>
       <artifactId>httpunit</artifactId>
       <version>1.7</version>
-      <scope>test</scope>
-    </dependency>
-
-    <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <version>1.2.16</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -170,22 +156,31 @@
               </execution>
             </executions>
           </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-javadoc-plugin</artifactId>
-            <version>2.9</version>
-            <executions>
-              <execution>
-                <id>attach-javadocs</id>
-                <goals>
-                  <goal>jar</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
         </plugins>
       </build>
     </profile>
   </profiles>
+
+  <repositories>
+    <repository>
+      <id>ix-nexus</id>
+      <url>http://ci-ix.sgdcelab.sabre.com:8001/nexus/content/groups/public</url>
+    </repository>
+    <repository>
+      <id>sabreall</id>
+      <url>http://maven.sabre.com/content/groups/all_repos</url>
+    </repository>
+  </repositories>
+
+  <pluginRepositories>
+    <pluginRepository>
+      <id>ix-nexus</id>
+      <url>http://ci-ix.sgdcelab.sabre.com:8001/nexus/content/groups/public</url>
+    </pluginRepository>
+    <pluginRepository>
+      <id>sabreall</id>
+      <url>http://maven.sabre.com/content/groups/all_repos</url>
+    </pluginRepository>
+  </pluginRepositories>
   
 </project>
